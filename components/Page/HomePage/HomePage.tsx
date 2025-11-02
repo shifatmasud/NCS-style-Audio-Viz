@@ -19,16 +19,16 @@ const HomePage: React.FC = () => {
   
   const [visualizerParams, setVisualizerParams] = useState<VisualizerParams>({
     bloom: 0.35,
-    pointSize: 1.5,
-    particleDensity: 60,
-    baseColor: '#1980ff',
-    hotColor: '#ffffff',
-    waveFrequency: 8.0,
-    waveSpeed: 1.0,
+    pointSize: 3.8,
+    particleDensity: 31,
+    baseColor: "#5d47ff",
+    hotColor: "#ffffff",
+    waveFrequency: 6,
+    waveSpeed: 2.4,
     waveSize: 0.25,
-    displacementScale: 1.0,
-    noiseSize: 1.0,
-    shrinkScale: 0.5,
+    displacementScale: 1.1,
+    noiseSize: 1,
+    shrinkScale: 0.87,
   });
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -157,23 +157,22 @@ const HomePage: React.FC = () => {
     return () => cancelAnimationFrame(animationFrameId);
   }, [rawMousePos]);
 
-  const handlePlayPause = async () => {
-    if (!audioContextRef.current || !audioRef.current) return;
+  const handlePlayPause = useCallback(async () => {
+    if (!audioContextRef.current || !audioRef.current || !audioFile) return;
 
     if (audioContextRef.current.state === 'suspended') {
       await audioContextRef.current.resume();
       addLog("Audio context resumed.");
     }
     
-    if (isPlaying) {
-      audioRef.current.pause();
-      addLog("Audio paused.");
-    } else {
+    if (audioRef.current.paused) {
       audioRef.current.play();
       addLog("Audio playing.");
+    } else {
+      audioRef.current.pause();
+      addLog("Audio paused.");
     }
-    setIsPlaying(!isPlaying);
-  };
+  }, [addLog, audioFile]);
   
   const handleExportParams = () => {
     const dataStr = JSON.stringify(visualizerParams, null, 2);
@@ -243,6 +242,7 @@ const HomePage: React.FC = () => {
             isPlaying={isPlaying}
             params={visualizerParams}
             mousePos={smoothedMousePos}
+            onSphereClick={handlePlayPause}
           />
         ) : (
           <InitialState onFileChange={handleFileChange} />

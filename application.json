@@ -1,0 +1,13 @@
+{
+  "bloom": 0.35,
+  "pointSize": 3.8,
+  "particleDensity": 31,
+  "baseColor": "#5d47ff",
+  "hotColor": "#ffffff",
+  "waveFrequency": 6,
+  "waveSpeed": 2.4,
+  "waveSize": 0.25,
+  "displacementScale": 1.1,
+  "noiseSize": 1,
+  "shrinkScale": 0.87
+}

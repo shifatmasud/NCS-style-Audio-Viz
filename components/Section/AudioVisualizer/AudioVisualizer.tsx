@@ -6,22 +6,23 @@ interface AudioVisualizerProps {
   isPlaying: boolean;
   params: VisualizerParams;
   mousePos: { x: number; y: number; };
+  onSphereClick: () => void;
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, params, mousePos }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, params, mousePos, onSphereClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const visualizerRef = useRef<Visualizer | null>(null);
 
   useEffect(() => {
     if (containerRef.current) {
-      visualizerRef.current = new Visualizer(containerRef.current, analyser);
+      visualizerRef.current = new Visualizer(containerRef.current, analyser, onSphereClick);
       visualizerRef.current.init();
     }
 
     return () => {
       visualizerRef.current?.destroy();
     };
-  }, [analyser]);
+  }, [analyser, onSphereClick]);
 
   useEffect(() => {
     visualizerRef.current?.setPlaying(isPlaying);

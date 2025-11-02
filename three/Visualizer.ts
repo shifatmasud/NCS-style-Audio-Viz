@@ -148,6 +148,7 @@ export class Visualizer {
     private container: HTMLElement;
     private analyser: AnalyserNode;
     private isPlaying: boolean = false;
+    private onSphereClick: () => void;
     
     private renderer!: THREE.WebGLRenderer;
     private scene!: THREE.Scene;
@@ -158,15 +159,19 @@ export class Visualizer {
     private composer!: EffectComposer;
     private bloomPass!: UnrealBloomPass;
 
+    private raycaster!: THREE.Raycaster;
+    private mouse!: THREE.Vector2;
+
     private freqDataArray: Uint8Array;
     
     private animationFrameId: number = 0;
     private fadeOutStartTime: number = 0;
-    private currentParticleDensity: number = 60;
+    private currentParticleDensity: number = 31;
 
-    constructor(container: HTMLElement, analyser: AnalyserNode) {
+    constructor(container: HTMLElement, analyser: AnalyserNode, onSphereClick: () => void) {
         this.container = container;
         this.analyser = analyser;
+        this.onSphereClick = onSphereClick;
         this.freqDataArray = new Uint8Array(this.analyser.frequencyBinCount);
     }
 
@@ -183,6 +188,10 @@ export class Visualizer {
         this.camera = new THREE.PerspectiveCamera(75, this.container.clientWidth / this.container.clientHeight, 0.1, 100);
         this.camera.position.z = 4.0;
         this.clock = new THREE.Clock();
+
+        // Raycasting for clicks
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
         
         // Geometry & Material
         const geometry = new THREE.IcosahedronGeometry(1.5, this.currentParticleDensity);
@@ -193,16 +202,16 @@ export class Visualizer {
                 uTime: { value: 0 },
                 uLoudness: { value: 0 },
                 uIsPlaying: { value: false },
-                uPointSize: { value: 1.5 },
-                uBaseColor: { value: new THREE.Color(0x1980ff) },
+                uPointSize: { value: 3.8 },
+                uBaseColor: { value: new THREE.Color(0x5d47ff) },
                 uHotColor: { value: new THREE.Color(0xffffff) },
-                uWaveFrequency: { value: 8.0 },
-                uWaveSpeed: { value: 1.0 },
+                uWaveFrequency: { value: 6.0 },
+                uWaveSpeed: { value: 2.4 },
                 uWaveSize: { value: 0.25 },
-                uNoiseSize: { value: 2.5 },
+                uNoiseSize: { value: 1.0 },
                 uMousePos: { value: new THREE.Vector2(10000, 10000) },
-                uDisplacementScale: { value: 1.0 },
-                uShrinkScale: { value: 0.5 },
+                uDisplacementScale: { value: 1.1 },
+                uShrinkScale: { value: 0.87 },
             },
             transparent: true,
             depthWrite: false,
@@ -225,6 +234,7 @@ export class Visualizer {
 
         // Event Listeners
         window.addEventListener('resize', this.onWindowResize);
+        this.renderer.domElement.addEventListener('click', this.onClick);
         
         // Start animation loop
         this.animate();
@@ -232,6 +242,18 @@ export class Visualizer {
     
     public setPlaying(isPlaying: boolean) {
         this.isPlaying = isPlaying;
+    }
+
+    private onClick = (event: MouseEvent) => {
+        // Calculate mouse position in normalized device coordinates
+        // (-1 to +1) for both components.
+        this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+        this.mouse.y = - (event.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersects = this.raycaster.intersectObject(this.points);
+
+        if (intersects.length > 0) this.onSphereClick();
     }
 
     public updateMousePosition(pos: { x: number; y: number }) {
@@ -311,6 +333,7 @@ export class Visualizer {
     public destroy() {
         cancelAnimationFrame(this.animationFrameId);
         window.removeEventListener('resize', this.onWindowResize);
+        this.renderer.domElement.removeEventListener('click', this.onClick);
         this.points.geometry.dispose();
         this.material.dispose();
         this.renderer.dispose();
