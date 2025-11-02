@@ -4,6 +4,7 @@ import MetaPrototypeLayout from '../../Layout/MetaPrototypeLayout';
 import ControlPanel from '../../Package/ControlPanel/ControlPanel';
 import CodePanel from '../../Package/CodePanel/CodePanel';
 import ConsolePanel from '../../Package/ConsolePanel/ConsolePanel';
+import { VisualizerParams } from '../../../three/Visualizer';
 
 const HomePage: React.FC = () => {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -11,10 +12,35 @@ const HomePage: React.FC = () => {
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [visualizerParams, setVisualizerParams] = useState({ bloom: 0.35 });
+  const [logs, setLogs] = useState<string[]>([]);
+  
+  const [rawMousePos, setRawMousePos] = useState({ x: 10000, y: 10000 });
+  const [smoothedMousePos, setSmoothedMousePos] = useState({ x: 10000, y: 10000 });
+  
+  const [visualizerParams, setVisualizerParams] = useState<VisualizerParams>({
+    bloom: 0.35,
+    pointSize: 1.5,
+    baseColor: '#1980ff',
+    hotColor: '#ffffff',
+    waveFrequency: 8.0,
+    waveSpeed: 1.0,
+    waveSize: 0.25,
+    displacementScale: 1.0,
+    noiseSize: 2.5,
+    shrinkScale: 0.5,
+  });
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  const addLog = useCallback((message: string) => {
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+    setLogs(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 99)]);
+  }, []);
+
+  useEffect(() => {
+    addLog("Application initialized.");
+  }, [addLog]);
 
   const setupAudioContext = useCallback(() => {
     if (audioRef.current && !audioContextRef.current) {
@@ -29,8 +55,9 @@ const HomePage: React.FC = () => {
       audioContextRef.current = context;
       setAnalyser(analyserNode);
       setIsReady(true);
+      addLog("Audio context ready.");
     }
-  }, []);
+  }, [addLog]);
   
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -39,9 +66,20 @@ const HomePage: React.FC = () => {
         handlePlayPause();
       }
       setIsReady(false);
+      
+      // Clean up old audio context and URL
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      
       setAudioFile(file);
       const url = URL.createObjectURL(file);
       setAudioUrl(url);
+      addLog(`Audio file selected: ${file.name}`);
     }
   };
 
@@ -51,27 +89,140 @@ const HomePage: React.FC = () => {
       audioRef.current.load();
       setupAudioContext();
     }
+    
+    // Cleanup on component unmount
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    }
   }, [audioUrl, setupAudioContext]);
+
+  // Effect for capturing raw mouse/touch position
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      setRawMousePos({
+        x: (event.clientX / window.innerWidth) * 2 - 1,
+        y: -(event.clientY / window.innerHeight) * 2 + 1,
+      });
+    };
+    
+    const handleTouch = (event: TouchEvent) => {
+      if(event.touches.length > 0) {
+         setRawMousePos({
+          x: (event.touches[0].clientX / window.innerWidth) * 2 - 1,
+          y: -(event.touches[0].clientY / window.innerHeight) * 2 + 1,
+        });
+      }
+    };
+
+    const handleMouseLeave = () => {
+      setRawMousePos({ x: 10000, y: 10000 });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('touchstart', handleTouch, { passive: true });
+    window.addEventListener('touchmove', handleTouch, { passive: true });
+    window.addEventListener('mouseleave', handleMouseLeave);
+    window.addEventListener('touchend', handleMouseLeave);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchstart', handleTouch);
+      window.removeEventListener('touchmove', handleTouch);
+      window.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('touchend', handleMouseLeave);
+    };
+  }, []);
   
+  // Effect for smoothing the position via interpolation
+  useEffect(() => {
+    const lerp = (a: number, b: number, t: number) => a * (1 - t) + b * t;
+    let animationFrameId: number;
+    
+    const animate = () => {
+      setSmoothedMousePos(prevPos => ({
+        x: lerp(prevPos.x, rawMousePos.x, 0.075),
+        y: lerp(prevPos.y, rawMousePos.y, 0.075)
+      }));
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    animationFrameId = requestAnimationFrame(animate);
+    
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [rawMousePos]);
+
   const handlePlayPause = async () => {
     if (!audioContextRef.current || !audioRef.current) return;
 
     if (audioContextRef.current.state === 'suspended') {
       await audioContextRef.current.resume();
+      addLog("Audio context resumed.");
     }
     
     if (isPlaying) {
       audioRef.current.pause();
+      addLog("Audio paused.");
     } else {
       audioRef.current.play();
+      addLog("Audio playing.");
     }
     setIsPlaying(!isPlaying);
   };
+  
+  const handleExportParams = () => {
+    const dataStr = JSON.stringify(visualizerParams, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = 'visualizer-settings.json';
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    addLog("Visualizer settings exported.");
+  };
+
+  const handleImportParams = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const text = e.target?.result;
+            if (typeof text === 'string') {
+                const importedParams = JSON.parse(text);
+                // Basic validation
+                if(importedParams.bloom !== undefined && importedParams.pointSize !== undefined) {
+                    setVisualizerParams(importedParams);
+                    addLog(`Settings imported from ${file.name}.`);
+                } else {
+                    addLog(`Error: Invalid JSON structure in ${file.name}.`);
+                }
+            }
+        } catch (error) {
+            addLog(`Error reading JSON file: ${error}`);
+        }
+    };
+    reader.readAsText(file);
+  };
+
 
   return (
     <>
       <MetaPrototypeLayout
-        codePanel={<CodePanel />}
+        codePanel={
+          <CodePanel 
+            onImport={handleImportParams} 
+            onExport={handleExportParams}
+            addLog={addLog}
+          />
+        }
         controlPanel={
           <ControlPanel
             audioFile={audioFile}
@@ -80,15 +231,17 @@ const HomePage: React.FC = () => {
             onPlayPause={handlePlayPause}
             visualizerParams={visualizerParams}
             onParamsChange={setVisualizerParams}
+            addLog={addLog}
           />
         }
-        consolePanel={<ConsolePanel />}
+        consolePanel={<ConsolePanel logs={logs} />}
       >
         {isReady && analyser ? (
           <AudioVisualizer 
             analyser={analyser} 
             isPlaying={isPlaying}
             params={visualizerParams}
+            mousePos={smoothedMousePos}
           />
         ) : (
           <InitialState onFileChange={handleFileChange} />

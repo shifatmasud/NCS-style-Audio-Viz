@@ -3,16 +3,36 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
+export interface VisualizerParams {
+  bloom: number;
+  pointSize: number;
+  baseColor: string;
+  hotColor: string;
+  waveFrequency: number;
+  waveSpeed: number;
+  waveSize: number;
+  displacementScale: number;
+  noiseSize: number;
+  shrinkScale: number;
+}
+
 const vertexShader = `
   uniform float uTime;
   uniform float uLoudness;
-  uniform sampler2D uFreqTexture;
+  uniform float uPointSize;
+  uniform float uWaveFrequency;
+  uniform float uWaveSpeed;
+  uniform float uWaveSize;
+  uniform float uNoiseSize;
+  uniform vec2 uMousePos;
+  uniform float uDisplacementScale;
+  uniform float uShrinkScale;
 
   varying float vDisplacement;
   
   #define PI 3.14159265359
 
-  // Simplex Noise (base for FBM)
+  // Simplex Noise
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -61,35 +81,38 @@ const vertexShader = `
     return 42.0 * dot(m*m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
   }
 
-  // Fractional Brownian Motion
-  float fbm(vec3 p) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float frequency = 1.0;
-    for (int i = 0; i < 4; i++) {
-        value += amplitude * snoise(p * frequency);
-        frequency *= 2.0;
-        amplitude *= 0.5;
-    }
-    return value;
-  }
-  
-  float hash31(vec3 p) {
-      p = fract(p * vec3(443.897, 441.423, 437.195));
-      p += dot(p, p.yzx + 19.19);
-      return fract((p.x + p.y) * p.z);
-  }
-
-
   void main() {
-    float random_coord = hash31(position);
-    float freq = texture2D(uFreqTexture, vec2(random_coord, 0.0)).r;
-    float fluid_distortion = fbm(position * 1.5 + uTime * 0.1) * 0.2 * uLoudness;
-    float displacement = freq * 0.4 + fluid_distortion;
-    vDisplacement = freq;
+    // Wave-based displacement driven by loudness
+    float noise_for_wave = snoise(position * uNoiseSize + uTime * 0.3);
+    float wave = sin(dot(normalize(position), vec3(1.0, 1.0, 1.0)) * uWaveFrequency + uTime * uWaveSpeed + noise_for_wave * PI) * uWaveSize * uLoudness;
+    
+    // Mouse interaction with fluid motion
+    vec4 screenPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec2 screenUV = screenPos.xy / screenPos.w;
+    float mouseDist = distance(screenUV, uMousePos);
+
+    // Calculate a base influence with a smooth falloff.
+    float mouseInfluence = 1.0 - smoothstep(0.0, 0.35, mouseDist);
+    mouseInfluence = pow(mouseInfluence, 2.0);
+
+    // Add fluid motion using time-varying simplex noise.
+    float fluidWobble = snoise(position * 4.0 + uTime * 2.5) * 0.4;
+
+    // Apply the push displacement, modulated by the wobble and scaled by a uniform.
+    float mouseDisplacement = mouseInfluence * (0.6 + fluidWobble) * uDisplacementScale;
+
+    float totalDisplacement = wave + mouseDisplacement;
+    
+    // Pass intensity to fragment shader for glow effect
+    vDisplacement = uLoudness + mouseDisplacement * 0.5; 
+
     vec3 normal = normalize(position);
-    vec3 newPosition = position + normal * displacement;
-    gl_PointSize = (vDisplacement * 3.0 + 1.5);
+    vec3 newPosition = position + normal * totalDisplacement;
+    
+    // Loudness-synced shrink and grow effect
+    newPosition *= (1.0 - uLoudness * uShrinkScale);
+
+    gl_PointSize = uPointSize;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
   }
 `;
@@ -97,6 +120,8 @@ const vertexShader = `
 const fragmentShader = `
   uniform float uTime;
   uniform bool uIsPlaying;
+  uniform vec3 uBaseColor;
+  uniform vec3 uHotColor;
   
   varying float vDisplacement;
 
@@ -105,12 +130,15 @@ const fragmentShader = `
     float strength = 1.0 - smoothstep(0.4, 0.5, dist);
     if (strength < 0.001) discard;
 
-    vec3 baseColor = vec3(0.15, 0.6, 1.0);
-    float intensity = pow(vDisplacement, 2.0) * 1.5;
-    vec3 final_color = baseColor * intensity + baseColor * 0.2;
+    // More subtle intensity calculation for glow
+    float intensity = pow(vDisplacement, 1.5) * 0.8;
+    
+    // Mix between base color and hot color based on intensity
+    vec3 final_color = mix(uBaseColor, uHotColor, smoothstep(0.2, 0.7, intensity));
+    
     float alpha = uIsPlaying ? 1.0 : smoothstep(1.5, 0.0, uTime);
 
-    gl_FragColor = vec4(final_color, strength * alpha);
+    gl_FragColor = vec4(final_color * (intensity * 0.5 + 0.3), strength * alpha);
   }
 `;
 
@@ -130,8 +158,7 @@ export class Visualizer {
     private bloomPass!: UnrealBloomPass;
 
     private freqDataArray: Uint8Array;
-    private freqTexture: THREE.DataTexture;
-
+    
     private animationFrameId: number = 0;
     private fadeOutStartTime: number = 0;
 
@@ -139,7 +166,6 @@ export class Visualizer {
         this.container = container;
         this.analyser = analyser;
         this.freqDataArray = new Uint8Array(this.analyser.frequencyBinCount);
-        this.freqTexture = new THREE.DataTexture(this.freqDataArray, this.analyser.frequencyBinCount, 1, THREE.RedFormat, THREE.UnsignedByteType);
     }
 
     public init() {
@@ -164,8 +190,17 @@ export class Visualizer {
             uniforms: {
                 uTime: { value: 0 },
                 uLoudness: { value: 0 },
-                uFreqTexture: { value: this.freqTexture },
                 uIsPlaying: { value: false },
+                uPointSize: { value: 1.5 },
+                uBaseColor: { value: new THREE.Color(0x1980ff) },
+                uHotColor: { value: new THREE.Color(0xffffff) },
+                uWaveFrequency: { value: 8.0 },
+                uWaveSpeed: { value: 1.0 },
+                uWaveSize: { value: 0.25 },
+                uNoiseSize: { value: 2.5 },
+                uMousePos: { value: new THREE.Vector2(10000, 10000) },
+                uDisplacementScale: { value: 1.0 },
+                uShrinkScale: { value: 0.5 },
             },
             transparent: true,
             depthWrite: false,
@@ -197,8 +232,24 @@ export class Visualizer {
         this.isPlaying = isPlaying;
     }
 
-    public updateParams(params: { bloom: number }) {
+    public updateMousePosition(pos: { x: number; y: number }) {
+        if (this.material) {
+            this.material.uniforms.uMousePos.value.x = pos.x;
+            this.material.uniforms.uMousePos.value.y = pos.y;
+        }
+    }
+
+    public updateParams(params: VisualizerParams) {
         this.bloomPass.strength = params.bloom;
+        this.material.uniforms.uPointSize.value = params.pointSize;
+        this.material.uniforms.uBaseColor.value.set(params.baseColor);
+        this.material.uniforms.uHotColor.value.set(params.hotColor);
+        this.material.uniforms.uWaveFrequency.value = params.waveFrequency;
+        this.material.uniforms.uWaveSpeed.value = params.waveSpeed;
+        this.material.uniforms.uWaveSize.value = params.waveSize;
+        this.material.uniforms.uDisplacementScale.value = params.displacementScale;
+        this.material.uniforms.uNoiseSize.value = params.noiseSize;
+        this.material.uniforms.uShrinkScale.value = params.shrinkScale;
     }
 
     private onWindowResize = () => {
@@ -216,19 +267,28 @@ export class Visualizer {
         
         if (this.isPlaying) {
             this.analyser.getByteFrequencyData(this.freqDataArray);
-            this.freqTexture.needsUpdate = true;
             
-            const loudness = this.freqDataArray.reduce((acc, val) => acc + val, 0) / (this.freqDataArray.length * 255);
+            const rawLoudness = this.freqDataArray.reduce((acc, val) => acc + val, 0) / (this.freqDataArray.length * 255);
             
+            // Enhance the loudness value to increase dynamic range, making peaks more prominent.
+            const enhancedLoudness = Math.pow(rawLoudness, 2.0) * 1.5;
+
             this.material.uniforms.uTime.value = this.clock.getElapsedTime();
-            this.material.uniforms.uLoudness.value = THREE.MathUtils.lerp(this.material.uniforms.uLoudness.value, loudness, 0.1);
+            
+            // Increase the lerp factor for a much faster, more "reactive" response to loudness changes.
+            this.material.uniforms.uLoudness.value = THREE.MathUtils.lerp(
+                this.material.uniforms.uLoudness.value,
+                Math.min(enhancedLoudness, 1.0), // Clamp to prevent visual glitches
+                0.4 // Increased from 0.1 for more reactivity
+            );
+
             if(!this.material.uniforms.uIsPlaying.value){
                 this.material.uniforms.uIsPlaying.value = true;
             }
         } else {
             const currentLoudness = this.material.uniforms.uLoudness.value;
             this.material.uniforms.uLoudness.value = THREE.MathUtils.lerp(currentLoudness, 0, 0.05);
-    
+
             if(this.material.uniforms.uIsPlaying.value){
                 this.fadeOutStartTime = this.clock.getElapsedTime();
                 this.material.uniforms.uIsPlaying.value = false;

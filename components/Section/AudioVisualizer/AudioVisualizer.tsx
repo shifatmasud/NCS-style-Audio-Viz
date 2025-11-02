@@ -1,13 +1,14 @@
 import React, { useRef, useEffect } from 'react';
-import { Visualizer } from '../../../three/Visualizer';
+import { Visualizer, VisualizerParams } from '../../../three/Visualizer';
 
 interface AudioVisualizerProps {
   analyser: AnalyserNode;
   isPlaying: boolean;
-  params: { bloom: number };
+  params: VisualizerParams;
+  mousePos: { x: number; y: number; };
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, params }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, params, mousePos }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const visualizerRef = useRef<Visualizer | null>(null);
 
@@ -29,6 +30,10 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, 
   useEffect(() => {
     visualizerRef.current?.updateParams(params);
   }, [params]);
+
+  useEffect(() => {
+    visualizerRef.current?.updateMousePosition(mousePos);
+  }, [mousePos]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 };

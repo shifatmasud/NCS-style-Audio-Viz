@@ -1,16 +1,18 @@
 import React, { useRef, useEffect } from 'react';
 import GUI from 'lil-gui';
-import { useTheme, Theme } from '../../../styles/theme';
+import { useTheme } from '../../../styles/theme';
 import Button from '../../Core/Button/Button';
 import { ArrowUp, Play, Pause, Sun, Moon } from '../../Core/Icon/PhosphorIcons';
+import { VisualizerParams } from '../../../three/Visualizer';
 
 interface ControlPanelProps {
   audioFile: File | null;
   isPlaying: boolean;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onPlayPause: () => void;
-  visualizerParams: { bloom: number };
-  onParamsChange: (params: { bloom: number }) => void;
+  visualizerParams: VisualizerParams;
+  onParamsChange: (params: VisualizerParams) => void;
+  addLog: (message: string) => void;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -19,27 +21,107 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onFileChange,
   onPlayPause,
   visualizerParams,
-  onParamsChange
+  onParamsChange,
+  addLog
 }) => {
   const { theme, themeMode, toggleTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const guiRef = useRef<HTMLDivElement>(null);
+  const guiInstanceRef = useRef<GUI | null>(null);
 
   useEffect(() => {
-    if (!guiRef.current) return;
+    if (!guiRef.current || guiInstanceRef.current) return;
     
     const gui = new GUI({container: guiRef.current});
+    guiInstanceRef.current = gui;
+
+    const visualsFolder = gui.addFolder('Visuals');
     
-    gui.add(visualizerParams, 'bloom', 0, 2, 0.01)
-      .name('Bloom Intensity')
+    visualsFolder.add(visualizerParams, 'bloom', 0, 2, 0.01)
+      .name('Bloom')
       .onChange((value: number) => {
         onParamsChange({ ...visualizerParams, bloom: value });
+        addLog(`Bloom set to ${value.toFixed(2)}`);
+      });
+
+    visualsFolder.add(visualizerParams, 'pointSize', 0.1, 5, 0.1)
+      .name('Particle Size')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, pointSize: value });
+        addLog(`Particle size set to ${value.toFixed(1)}`);
+      });
+      
+    visualsFolder.addColor(visualizerParams, 'baseColor')
+      .name('Base Color')
+      .onChange((value: string) => {
+        onParamsChange({ ...visualizerParams, baseColor: value });
+        addLog(`Base color set to ${value}`);
+      });
+      
+    visualsFolder.addColor(visualizerParams, 'hotColor')
+      .name('Hot Color')
+      .onChange((value: string) => {
+        onParamsChange({ ...visualizerParams, hotColor: value });
+        addLog(`Hot color set to ${value}`);
+      });
+
+    const waveFolder = gui.addFolder('Wave');
+    waveFolder.add(visualizerParams, 'waveFrequency', 1, 20, 0.5)
+      .name('Frequency')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, waveFrequency: value });
+        addLog(`Wave frequency set to ${value.toFixed(1)}`);
+      });
+
+    waveFolder.add(visualizerParams, 'waveSpeed', 0, 5, 0.1)
+      .name('Speed')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, waveSpeed: value });
+        addLog(`Wave speed set to ${value.toFixed(1)}`);
+      });
+      
+    waveFolder.add(visualizerParams, 'waveSize', 0.0, 1.0, 0.01)
+      .name('Size')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, waveSize: value });
+        addLog(`Wave size set to ${value.toFixed(2)}`);
+      });
+      
+    waveFolder.add(visualizerParams, 'noiseSize', 0.1, 10, 0.1)
+      .name('Noise Size')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, noiseSize: value });
+        addLog(`Noise size set to ${value.toFixed(1)}`);
+      });
+
+    const interactionFolder = gui.addFolder('Interaction');
+    interactionFolder.add(visualizerParams, 'displacementScale', 0, 5, 0.1)
+      .name('Displacement Scale')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, displacementScale: value });
+        addLog(`Displacement scale set to ${value.toFixed(1)}`);
+      });
+
+    const shrinkFolder = gui.addFolder('Shrink');
+    shrinkFolder.add(visualizerParams, 'shrinkScale', 0, 2, 0.01)
+      .name('Shrink')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, shrinkScale: value });
+        addLog(`Shrink scale set to ${value.toFixed(2)}`);
       });
 
     return () => {
       gui.destroy();
+      guiInstanceRef.current = null;
     }
-  }, [guiRef.current]);
+  }, []); // Run only once
+
+  // Update GUI when params change from external source (like import)
+  useEffect(() => {
+    if (guiInstanceRef.current) {
+      guiInstanceRef.current.controllers.forEach(c => c.updateDisplay());
+    }
+  }, [visualizerParams])
 
   const styles: { [key: string]: React.CSSProperties } = {
     panelWrapper: {
@@ -90,6 +172,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     }
   }
 
+  const handleThemeToggle = () => {
+    toggleTheme();
+    addLog(`Theme changed to ${themeMode === 'dark' ? 'light' : 'dark'} mode.`);
+  }
+
   return (
     <div style={styles.panelWrapper}>
       <div style={styles.section}>
@@ -120,13 +207,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       <div style={styles.section}>
-        <h2 style={styles.title}>Visuals</h2>
         <div ref={guiRef} id="gui-container"></div>
       </div>
       
       <div style={{...styles.section, borderBottom: 'none'}}>
         <h2 style={styles.title}>Settings</h2>
-        <Button onClick={toggleTheme} style={styles.themeSwitcher} aria-label="Toggle theme">
+        <Button onClick={handleThemeToggle} style={styles.themeSwitcher} aria-label="Toggle theme">
             {themeMode === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
         </Button>
       </div>
