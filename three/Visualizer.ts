@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 export interface VisualizerParams {
   bloom: number;
   pointSize: number;
+  particleDensity: number;
   baseColor: string;
   hotColor: string;
   waveFrequency: number;
@@ -82,10 +83,6 @@ const vertexShader = `
   }
 
   void main() {
-    // Wave-based displacement driven by loudness
-    float noise_for_wave = snoise(position * uNoiseSize + uTime * 0.3);
-    float wave = sin(dot(normalize(position), vec3(1.0, 1.0, 1.0)) * uWaveFrequency + uTime * uWaveSpeed + noise_for_wave * PI) * uWaveSize * uLoudness;
-    
     // Mouse interaction with fluid motion
     vec4 screenPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     vec2 screenUV = screenPos.xy / screenPos.w;
@@ -101,7 +98,11 @@ const vertexShader = `
     // Apply the push displacement, modulated by the wobble and scaled by a uniform.
     float mouseDisplacement = mouseInfluence * (0.6 + fluidWobble) * uDisplacementScale;
 
-    float totalDisplacement = wave + mouseDisplacement;
+    // Wave-based displacement driven by loudness. It fades out as mouse influence increases.
+    float noise_for_wave = snoise(position * uNoiseSize + uTime * 0.3);
+    float wave = sin(dot(normalize(position), vec3(1.0, 1.0, 1.0)) * uWaveFrequency + uTime * uWaveSpeed + noise_for_wave * PI) * uWaveSize * uLoudness;
+    
+    float totalDisplacement = wave * (1.0 - mouseInfluence) + mouseDisplacement;
     
     // Pass intensity to fragment shader for glow effect
     vDisplacement = uLoudness + mouseDisplacement * 0.5; 
@@ -161,6 +162,7 @@ export class Visualizer {
     
     private animationFrameId: number = 0;
     private fadeOutStartTime: number = 0;
+    private currentParticleDensity: number = 60;
 
     constructor(container: HTMLElement, analyser: AnalyserNode) {
         this.container = container;
@@ -183,7 +185,7 @@ export class Visualizer {
         this.clock = new THREE.Clock();
         
         // Geometry & Material
-        const geometry = new THREE.IcosahedronGeometry(1.5, 60);
+        const geometry = new THREE.IcosahedronGeometry(1.5, this.currentParticleDensity);
         this.material = new THREE.ShaderMaterial({
             vertexShader,
             fragmentShader,
@@ -250,6 +252,13 @@ export class Visualizer {
         this.material.uniforms.uDisplacementScale.value = params.displacementScale;
         this.material.uniforms.uNoiseSize.value = params.noiseSize;
         this.material.uniforms.uShrinkScale.value = params.shrinkScale;
+
+        if (this.currentParticleDensity !== params.particleDensity) {
+            this.currentParticleDensity = params.particleDensity;
+            const newGeometry = new THREE.IcosahedronGeometry(1.5, Math.round(this.currentParticleDensity));
+            this.points.geometry.dispose();
+            this.points.geometry = newGeometry;
+        }
     }
 
     private onWindowResize = () => {

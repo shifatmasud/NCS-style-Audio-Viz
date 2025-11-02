@@ -20,13 +20,14 @@ const HomePage: React.FC = () => {
   const [visualizerParams, setVisualizerParams] = useState<VisualizerParams>({
     bloom: 0.35,
     pointSize: 1.5,
+    particleDensity: 60,
     baseColor: '#1980ff',
     hotColor: '#ffffff',
     waveFrequency: 8.0,
     waveSpeed: 1.0,
     waveSize: 0.25,
     displacementScale: 1.0,
-    noiseSize: 2.5,
+    noiseSize: 1.0,
     shrinkScale: 0.5,
   });
 

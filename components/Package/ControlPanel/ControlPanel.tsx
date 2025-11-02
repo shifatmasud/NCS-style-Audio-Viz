@@ -50,6 +50,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         onParamsChange({ ...visualizerParams, pointSize: value });
         addLog(`Particle size set to ${value.toFixed(1)}`);
       });
+
+    visualsFolder.add(visualizerParams, 'particleDensity', 10, 100, 1)
+      .name('Particle Density')
+      .onChange((value: number) => {
+        onParamsChange({ ...visualizerParams, particleDensity: value });
+        addLog(`Particle density set to ${value}`);
+      });
       
     visualsFolder.addColor(visualizerParams, 'baseColor')
       .name('Base Color')

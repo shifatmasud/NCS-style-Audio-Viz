@@ -5,8 +5,8 @@ import { Code, SlidersHorizontal, TerminalWindow, X } from '../Core/Icon/Phospho
 
 const getStyles = (theme: Theme): { [key: string]: CSSProperties } => ({
   layoutContainer: {
-    width: '100vw',
-    height: '100vh',
+    width: '100%',
+    height: '100%',
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: theme.Color.Base.Surface[1],
@@ -138,7 +138,7 @@ const MetaPrototypeLayout: React.FC<MetaPrototypeLayoutProps> = ({ children, cod
         <AnimatePresence>
             {!isConsoleOpen && (
                  <motion.button 
-                   style={{...styles.toggleButton, bottom: theme.Spacing.s4, left: '50%', transform: 'translateX(-50%)'}} 
+                   style={{...styles.toggleButton, bottom: theme.Spacing.s8, left: '50%', transform: 'translateX(-50%)'}} 
                    onClick={() => setIsConsoleOpen(true)} 
                    aria-label="Open Console Panel"
                    initial={{ opacity: 0, y: 20 }}
