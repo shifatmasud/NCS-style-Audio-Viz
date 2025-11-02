@@ -1,11 +1,51 @@
-<div align="center">
+# NCS Style Audio Visualizer
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+An immersive, NCS-inspired audio visualizer built with a decoupled vanilla Three.js renderer, managed by a React-based UI. This project follows the System Prompt v10 guidelines for architecture, styling, and componentization, including the #MP (Meta Prototype) panel-based layout.
 
-  <h1>Built with AI Studio</h2>
+Upload an audio file to experience a dynamic visual spectacle that reacts to your music in real-time.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Features
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+-   **Decoupled Vanilla Three.js Renderer:** All 3D rendering logic is handled by a standalone Three.js class, completely separate from React's render cycle for optimal performance.
+-   **Dynamic 3D Visualization:** A particle sphere that pulses and distorts based on audio frequency and loudness.
+-   **Custom GLSL Shaders:** Advanced shaders for particle displacement, fluid motion effects (FBM), and color intensity.
+-   **Meta Prototype UI:** A responsive, collapsible three-panel layout (Code, Controls, Console) for managing the application state and properties.
+-   **Reactive UI:** Built with React and Framer Motion for a fluid user experience.
+-   **Advanced Styling:** Implements a CSS-in-JS themeable design system based on semantic design tokens.
+-   **Light & Dark Modes:** Easily switch between themes.
 
-</div>
+## Project Structure
+
+```
+.
+├── index.html
+├── index.tsx
+├── App.tsx
+├── importmap.js
+├── metadata.json
+├── README.md
+├── noteBook.md
+├── bugReport.md
+├── three/
+│   └── Visualizer.ts
+├── components/
+│   ├── Core/
+│   │   ├── Button/
+│   │   └── Icon/
+│   ├── Layout/
+│   │   └── MetaPrototypeLayout.tsx
+│   ├── Package/
+│   │   ├── CodePanel/
+│   │   ├── ConsolePanel/
+│   │   └── ControlPanel/
+│   ├── Page/
+│   │   └── HomePage/
+│   └── Section/
+│       └── AudioVisualizer/
+└── styles/
+    ├── designTokens.ts
+    ├── GlobalStyles.tsx
+    └── theme.ts
+```
+
+*Note: The `/Asset` folder structure (with subfolders for Font, Model, Video, Image, SVG) is specified by the prompt but cannot be created as empty directories in this environment. In a standard project setup, these folders would exist at the root level.*

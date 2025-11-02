@@ -1,0 +1,7 @@
+{
+  "name": "NCS Style Audio Visualizer",
+  "description": "An immersive, NCS-inspired audio visualizer built with React, Three.js, and custom GLSL shaders. Upload an audio file to see the music come to life.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
