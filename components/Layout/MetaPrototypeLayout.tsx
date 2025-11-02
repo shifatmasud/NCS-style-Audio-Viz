@@ -7,44 +7,64 @@ const getStyles = (theme: Theme): { [key: string]: CSSProperties } => ({
   layoutContainer: {
     width: '100vw',
     height: '100vh',
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr auto',
-    gridTemplateRows: '1fr auto',
-    gridTemplateAreas: `
-      "code main control"
-      "console console console"
-    `,
+    position: 'relative',
+    overflow: 'hidden',
     backgroundColor: theme.Color.Base.Surface[1],
-    color: theme.Color.Base.Content[1],
-    transition: `background-color ${theme.Motion.durationM} ${theme.Motion.ease}, color ${theme.Motion.durationM} ${theme.Motion.ease}`,
   },
   mainContent: {
-    gridArea: 'main',
-    position: 'relative',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: theme.ZIndex.base,
+  },
+  panel: {
+    position: 'absolute',
+    width: 340,
+    maxHeight: `calc(100% - ${theme.Spacing.s8})`,
+    backgroundColor: `${theme.Color.Base.Surface[2]}cc`,
+    backdropFilter: 'blur(10px)',
+    border: `1px solid ${theme.Color.Border[1]}`,
+    borderRadius: theme.Radii.r4,
+    boxShadow: theme.Shadows.shadow3,
+    display: 'flex',
+    flexDirection: 'column',
+    zIndex: theme.ZIndex.panel,
+  },
+  panelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: `${theme.Spacing.s2} ${theme.Spacing.s4}`,
+    borderBottom: `1px solid ${theme.Color.Border[1]}`,
+    cursor: 'grab',
+    flexShrink: 0,
+  },
+  panelTitle: {
+    ...theme.Typography.labelL,
+    color: theme.Color.Base.Content[1],
+  },
+  closeButton: {
+    border: 'none',
+    background: 'transparent',
+    color: theme.Color.Base.Content[2],
+    cursor: 'pointer',
+    padding: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  panel: {
-    backgroundColor: theme.Color.Base.Surface[2],
-    borderLeft: `1px solid ${theme.Color.Border[1]}`,
-    borderRight: `1px solid ${theme.Color.Border[1]}`,
-    borderTop: `1px solid ${theme.Color.Border[1]}`,
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
-    overflow: 'hidden',
-    zIndex: theme.ZIndex.panel,
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
   },
   panelContent: {
     padding: theme.Spacing.s4,
     overflowY: 'auto',
-    height: '100%',
+    flex: 1,
   },
   toggleButton: {
     position: 'absolute',
-    top: theme.Spacing.s3,
     backgroundColor: theme.Color.Base.Surface[3],
     border: 'none',
     color: theme.Color.Base.Content[2],
@@ -55,9 +75,16 @@ const getStyles = (theme: Theme): { [key: string]: CSSProperties } => ({
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    zIndex: theme.ZIndex.header,
+    zIndex: theme.ZIndex.panel - 1,
+    boxShadow: theme.Shadows.shadow2,
   },
 });
+
+const panelMotionProps = {
+    transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+    dragTransition: { bounceStiffness: 600, bounceDamping: 20 },
+    dragMomentum: false,
+};
 
 interface MetaPrototypeLayoutProps {
   children: React.ReactNode;
@@ -73,66 +100,113 @@ const MetaPrototypeLayout: React.FC<MetaPrototypeLayoutProps> = ({ children, cod
   const [isControlOpen, setIsControlOpen] = useState(true);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   
-  const panelVariants = {
-      open: { width: 320, opacity: 1, x: 0 },
-      closed: { width: 0, opacity: 0, x: -20 },
-  };
-
-  const bottomPanelVariants = {
-      open: { height: 200, opacity: 1, y: 0 },
-      closed: { height: 0, opacity: 0, y: 20 },
-  }
-
   return (
     <div style={styles.layoutContainer}>
-        {/* Panel Toggles */}
-        <button style={{...styles.toggleButton, left: theme.Spacing.s3}} onClick={() => setIsCodeOpen(!isCodeOpen)} aria-label="Toggle Code Panel">
-           {isCodeOpen ? <X/> : <Code />}
-        </button>
-        <button style={{...styles.toggleButton, right: theme.Spacing.s3}} onClick={() => setIsControlOpen(!isControlOpen)} aria-label="Toggle Control Panel">
-           {isControlOpen ? <X/> : <SlidersHorizontal />}
-        </button>
-         <button style={{...styles.toggleButton, right: `calc(50% - 16px)`, bottom: theme.Spacing.s3}} onClick={() => setIsConsoleOpen(!isConsoleOpen)} aria-label="Toggle Console Panel">
-           {isConsoleOpen ? <X/> : <TerminalWindow />}
-        </button>
-
-        {/* Left Panel (Code) */}
-        <motion.div
-            style={{...styles.panel, gridArea: 'code', borderRight: `1px solid ${theme.Color.Border[1]}`}}
-            initial="closed"
-            animate={isCodeOpen ? 'open' : 'closed'}
-            variants={panelVariants}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-        >
-            <div style={styles.panelContent}>{codePanel}</div>
-        </motion.div>
-
-        {/* Main Content */}
         <main style={styles.mainContent}>
           {children}
         </main>
 
-        {/* Right Panel (Controls) */}
-        <motion.div
-            style={{...styles.panel, gridArea: 'control', borderLeft: `1px solid ${theme.Color.Border[1]}`}}
-            initial="open"
-            animate={isControlOpen ? 'open' : 'closed'}
-            variants={panelVariants}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-        >
-             <div style={styles.panelContent}>{controlPanel}</div>
-        </motion.div>
+        {/* Panel Toggles */}
+        <AnimatePresence>
+            {!isCodeOpen && (
+                <motion.button 
+                  style={{...styles.toggleButton, top: theme.Spacing.s4, left: theme.Spacing.s4}} 
+                  onClick={() => setIsCodeOpen(true)} 
+                  aria-label="Open Code Panel"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                >
+                   <Code />
+                </motion.button>
+            )}
+        </AnimatePresence>
+        <AnimatePresence>
+            {!isControlOpen && (
+                <motion.button 
+                  style={{...styles.toggleButton, top: theme.Spacing.s4, right: theme.Spacing.s4}} 
+                  onClick={() => setIsControlOpen(true)} 
+                  aria-label="Open Control Panel"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                >
+                   <SlidersHorizontal />
+                </motion.button>
+            )}
+        </AnimatePresence>
+        <AnimatePresence>
+            {!isConsoleOpen && (
+                 <motion.button 
+                   style={{...styles.toggleButton, bottom: theme.Spacing.s4, left: '50%', transform: 'translateX(-50%)'}} 
+                   onClick={() => setIsConsoleOpen(true)} 
+                   aria-label="Open Console Panel"
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, y: 20 }}
+                 >
+                   <TerminalWindow />
+                </motion.button>
+            )}
+        </AnimatePresence>
         
-        {/* Bottom Panel (Console) */}
-         <motion.div
-            style={{...styles.panel, gridArea: 'console', borderTop: `1px solid ${theme.Color.Border[1]}`}}
-            initial="closed"
-            animate={isConsoleOpen ? 'open' : 'closed'}
-            variants={bottomPanelVariants}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-        >
-            <div style={styles.panelContent}>{consolePanel}</div>
-        </motion.div>
+        {/* Panels */}
+        <AnimatePresence>
+            {isCodeOpen && (
+                <motion.div
+                    style={{...styles.panel, top: theme.Spacing.s4, left: theme.Spacing.s4}}
+                    drag dragHandle=".drag-handle"
+                    initial={{ opacity: 0, x: -50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -50 }}
+                    {...panelMotionProps}
+                >
+                    <div style={styles.panelHeader} className="drag-handle">
+                        <span style={styles.panelTitle}>Code I/O</span>
+                        <button style={styles.closeButton} onClick={() => setIsCodeOpen(false)} aria-label="Close Code Panel"><X /></button>
+                    </div>
+                    <div style={styles.panelContent}>{codePanel}</div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+            {isControlOpen && (
+                <motion.div
+                    style={{...styles.panel, top: theme.Spacing.s4, right: theme.Spacing.s4}}
+                    drag dragHandle=".drag-handle"
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 50 }}
+                    {...panelMotionProps}
+                >
+                     <div style={styles.panelHeader} className="drag-handle">
+                        <span style={styles.panelTitle}>Controls</span>
+                        <button style={styles.closeButton} onClick={() => setIsControlOpen(false)} aria-label="Close Control Panel"><X /></button>
+                    </div>
+                    <div style={styles.panelContent}>{controlPanel}</div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+        
+        <AnimatePresence>
+            {isConsoleOpen && (
+                 <motion.div
+                    style={{...styles.panel, height: 250, width: `calc(100% - ${theme.Spacing.s8})`, bottom: theme.Spacing.s4, left: theme.Spacing.s4 }}
+                    drag dragHandle=".drag-handle"
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 50 }}
+                    {...panelMotionProps}
+                 >
+                    <div style={styles.panelHeader} className="drag-handle">
+                        <span style={styles.panelTitle}>Console</span>
+                        <button style={styles.closeButton} onClick={() => setIsConsoleOpen(false)} aria-label="Close Console Panel"><X /></button>
+                    </div>
+                    <div style={styles.panelContent}>{consolePanel}</div>
+                </motion.div>
+            )}
+        </AnimatePresence>
     </div>
   );
 };
