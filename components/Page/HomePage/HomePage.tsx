@@ -14,9 +14,6 @@ const HomePage: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   
-  const [rawMousePos, setRawMousePos] = useState({ x: 10000, y: 10000 });
-  const [smoothedMousePos, setSmoothedMousePos] = useState({ x: 10000, y: 10000 });
-  
   const [visualizerParams, setVisualizerParams] = useState<VisualizerParams>({
     bloom: 0.35,
     pointSize: 3.8,
@@ -26,7 +23,6 @@ const HomePage: React.FC = () => {
     waveFrequency: 6,
     waveSpeed: 2.4,
     waveSize: 0.25,
-    displacementScale: 1.1,
     noiseSize: 1,
     shrinkScale: 0.87,
   });
@@ -101,61 +97,6 @@ const HomePage: React.FC = () => {
       }
     }
   }, [audioUrl, setupAudioContext]);
-
-  // Effect for capturing raw mouse/touch position
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      setRawMousePos({
-        x: (event.clientX / window.innerWidth) * 2 - 1,
-        y: -(event.clientY / window.innerHeight) * 2 + 1,
-      });
-    };
-    
-    const handleTouch = (event: TouchEvent) => {
-      if(event.touches.length > 0) {
-         setRawMousePos({
-          x: (event.touches[0].clientX / window.innerWidth) * 2 - 1,
-          y: -(event.touches[0].clientY / window.innerHeight) * 2 + 1,
-        });
-      }
-    };
-
-    const handleMouseLeave = () => {
-      setRawMousePos({ x: 10000, y: 10000 });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('touchstart', handleTouch, { passive: true });
-    window.addEventListener('touchmove', handleTouch, { passive: true });
-    window.addEventListener('mouseleave', handleMouseLeave);
-    window.addEventListener('touchend', handleMouseLeave);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('touchstart', handleTouch);
-      window.removeEventListener('touchmove', handleTouch);
-      window.removeEventListener('mouseleave', handleMouseLeave);
-      window.removeEventListener('touchend', handleMouseLeave);
-    };
-  }, []);
-  
-  // Effect for smoothing the position via interpolation
-  useEffect(() => {
-    const lerp = (a: number, b: number, t: number) => a * (1 - t) + b * t;
-    let animationFrameId: number;
-    
-    const animate = () => {
-      setSmoothedMousePos(prevPos => ({
-        x: lerp(prevPos.x, rawMousePos.x, 0.075),
-        y: lerp(prevPos.y, rawMousePos.y, 0.075)
-      }));
-      animationFrameId = requestAnimationFrame(animate);
-    };
-    
-    animationFrameId = requestAnimationFrame(animate);
-    
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [rawMousePos]);
 
   const handlePlayPause = useCallback(async () => {
     if (!audioContextRef.current || !audioRef.current || !audioFile) return;
@@ -241,7 +182,6 @@ const HomePage: React.FC = () => {
             analyser={analyser} 
             isPlaying={isPlaying}
             params={visualizerParams}
-            mousePos={smoothedMousePos}
             onSphereClick={handlePlayPause}
           />
         ) : (

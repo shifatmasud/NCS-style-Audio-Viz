@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 export interface VisualizerParams {
   bloom: number;
@@ -12,7 +13,6 @@ export interface VisualizerParams {
   waveFrequency: number;
   waveSpeed: number;
   waveSize: number;
-  displacementScale: number;
   noiseSize: number;
   shrinkScale: number;
 }
@@ -25,8 +25,6 @@ const vertexShader = `
   uniform float uWaveSpeed;
   uniform float uWaveSize;
   uniform float uNoiseSize;
-  uniform vec2 uMousePos;
-  uniform float uDisplacementScale;
   uniform float uShrinkScale;
 
   varying float vDisplacement;
@@ -83,29 +81,14 @@ const vertexShader = `
   }
 
   void main() {
-    // Mouse interaction with fluid motion
-    vec4 screenPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    vec2 screenUV = screenPos.xy / screenPos.w;
-    float mouseDist = distance(screenUV, uMousePos);
-
-    // Calculate a base influence with a smooth falloff.
-    float mouseInfluence = 1.0 - smoothstep(0.0, 0.35, mouseDist);
-    mouseInfluence = pow(mouseInfluence, 2.0);
-
-    // Add fluid motion using time-varying simplex noise.
-    float fluidWobble = snoise(position * 4.0 + uTime * 2.5) * 0.4;
-
-    // Apply the push displacement, modulated by the wobble and scaled by a uniform.
-    float mouseDisplacement = mouseInfluence * (0.6 + fluidWobble) * uDisplacementScale;
-
-    // Wave-based displacement driven by loudness. It fades out as mouse influence increases.
+    // Wave-based displacement driven by loudness
     float noise_for_wave = snoise(position * uNoiseSize + uTime * 0.3);
     float wave = sin(dot(normalize(position), vec3(1.0, 1.0, 1.0)) * uWaveFrequency + uTime * uWaveSpeed + noise_for_wave * PI) * uWaveSize * uLoudness;
     
-    float totalDisplacement = wave * (1.0 - mouseInfluence) + mouseDisplacement;
+    float totalDisplacement = wave;
     
     // Pass intensity to fragment shader for glow effect
-    vDisplacement = uLoudness + mouseDisplacement * 0.5; 
+    vDisplacement = uLoudness;
 
     vec3 normal = normalize(position);
     vec3 newPosition = position + normal * totalDisplacement;
@@ -154,6 +137,7 @@ export class Visualizer {
     private scene!: THREE.Scene;
     private camera!: THREE.PerspectiveCamera;
     private clock!: THREE.Clock;
+    private controls!: OrbitControls;
     private points!: THREE.Points;
     private material!: THREE.ShaderMaterial;
     private composer!: EffectComposer;
@@ -161,6 +145,8 @@ export class Visualizer {
 
     private raycaster!: THREE.Raycaster;
     private mouse!: THREE.Vector2;
+    private isDragging: boolean = false;
+    private dragStartPos: THREE.Vector2 = new THREE.Vector2();
 
     private freqDataArray: Uint8Array;
     
@@ -189,6 +175,17 @@ export class Visualizer {
         this.camera.position.z = 4.0;
         this.clock = new THREE.Clock();
 
+        // Orbit Controls
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.enableZoom = false;
+        this.controls.enablePan = false;
+        this.controls.minDistance = 3;
+        this.controls.maxDistance = 6;
+        this.controls.autoRotate = true;
+        this.controls.autoRotateSpeed = 0.5;
+
         // Raycasting for clicks
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
@@ -209,8 +206,6 @@ export class Visualizer {
                 uWaveSpeed: { value: 2.4 },
                 uWaveSize: { value: 0.25 },
                 uNoiseSize: { value: 1.0 },
-                uMousePos: { value: new THREE.Vector2(10000, 10000) },
-                uDisplacementScale: { value: 1.1 },
                 uShrinkScale: { value: 0.87 },
             },
             transparent: true,
@@ -234,7 +229,9 @@ export class Visualizer {
 
         // Event Listeners
         window.addEventListener('resize', this.onWindowResize);
-        this.renderer.domElement.addEventListener('click', this.onClick);
+        this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
+        this.renderer.domElement.addEventListener('pointermove', this.onPointerMove);
+        this.renderer.domElement.addEventListener('pointerup', this.onPointerUp);
         
         // Start animation loop
         this.animate();
@@ -244,24 +241,35 @@ export class Visualizer {
         this.isPlaying = isPlaying;
     }
 
-    private onClick = (event: MouseEvent) => {
-        // Calculate mouse position in normalized device coordinates
-        // (-1 to +1) for both components.
+    private onPointerDown = (event: PointerEvent) => {
+      this.isDragging = false;
+      this.dragStartPos.set(event.clientX, event.clientY);
+    };
+
+    private onPointerMove = (event: PointerEvent) => {
+        const currentPos = new THREE.Vector2(event.clientX, event.clientY);
+        // Use a small pixel threshold to detect a drag
+        if (this.dragStartPos.distanceTo(currentPos) > 3) {
+            this.isDragging = true;
+        }
+    };
+
+    private onPointerUp = (event: PointerEvent) => {
+        if (this.isDragging) {
+            return; // It was a drag, so don't trigger the click event
+        }
+        
+        // It's a click, perform raycast
         this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
         this.mouse.y = - (event.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
 
         this.raycaster.setFromCamera(this.mouse, this.camera);
         const intersects = this.raycaster.intersectObject(this.points);
 
-        if (intersects.length > 0) this.onSphereClick();
-    }
-
-    public updateMousePosition(pos: { x: number; y: number }) {
-        if (this.material) {
-            this.material.uniforms.uMousePos.value.x = pos.x;
-            this.material.uniforms.uMousePos.value.y = pos.y;
+        if (intersects.length > 0) {
+            this.onSphereClick();
         }
-    }
+    };
 
     public updateParams(params: VisualizerParams) {
         this.bloomPass.strength = params.bloom;
@@ -271,7 +279,6 @@ export class Visualizer {
         this.material.uniforms.uWaveFrequency.value = params.waveFrequency;
         this.material.uniforms.uWaveSpeed.value = params.waveSpeed;
         this.material.uniforms.uWaveSize.value = params.waveSize;
-        this.material.uniforms.uDisplacementScale.value = params.displacementScale;
         this.material.uniforms.uNoiseSize.value = params.noiseSize;
         this.material.uniforms.uShrinkScale.value = params.shrinkScale;
 
@@ -293,24 +300,21 @@ export class Visualizer {
     private animate = () => {
         this.animationFrameId = requestAnimationFrame(this.animate);
         
-        this.points.rotation.y += 0.0005;
-        this.points.rotation.x += 0.0002;
+        this.controls.update();
         
         if (this.isPlaying) {
             this.analyser.getByteFrequencyData(this.freqDataArray);
             
             const rawLoudness = this.freqDataArray.reduce((acc, val) => acc + val, 0) / (this.freqDataArray.length * 255);
             
-            // Enhance the loudness value to increase dynamic range, making peaks more prominent.
             const enhancedLoudness = Math.pow(rawLoudness, 2.0) * 1.5;
 
             this.material.uniforms.uTime.value = this.clock.getElapsedTime();
             
-            // Increase the lerp factor for a much faster, more "reactive" response to loudness changes.
             this.material.uniforms.uLoudness.value = THREE.MathUtils.lerp(
                 this.material.uniforms.uLoudness.value,
-                Math.min(enhancedLoudness, 1.0), // Clamp to prevent visual glitches
-                0.4 // Increased from 0.1 for more reactivity
+                Math.min(enhancedLoudness, 1.0),
+                0.4
             );
 
             if(!this.material.uniforms.uIsPlaying.value){
@@ -333,9 +337,12 @@ export class Visualizer {
     public destroy() {
         cancelAnimationFrame(this.animationFrameId);
         window.removeEventListener('resize', this.onWindowResize);
-        this.renderer.domElement.removeEventListener('click', this.onClick);
+        this.renderer.domElement.removeEventListener('pointerdown', this.onPointerDown);
+        this.renderer.domElement.removeEventListener('pointermove', this.onPointerMove);
+        this.renderer.domElement.removeEventListener('pointerup', this.onPointerUp);
         this.points.geometry.dispose();
         this.material.dispose();
+        this.controls.dispose();
         this.renderer.dispose();
         if (this.container && this.renderer.domElement) {
            this.container.removeChild(this.renderer.domElement);

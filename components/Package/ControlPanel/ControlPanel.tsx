@@ -101,14 +101,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         addLog(`Noise size set to ${value.toFixed(1)}`);
       });
 
-    const interactionFolder = gui.addFolder('Interaction');
-    interactionFolder.add(visualizerParams, 'displacementScale', 0, 5, 0.1)
-      .name('Displacement Scale')
-      .onChange((value: number) => {
-        onParamsChange({ ...visualizerParams, displacementScale: value });
-        addLog(`Displacement scale set to ${value.toFixed(1)}`);
-      });
-
     const shrinkFolder = gui.addFolder('Shrink');
     shrinkFolder.add(visualizerParams, 'shrinkScale', 0, 2, 0.01)
       .name('Shrink')

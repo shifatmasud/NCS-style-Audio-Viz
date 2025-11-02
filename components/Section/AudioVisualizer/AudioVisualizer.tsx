@@ -5,11 +5,10 @@ interface AudioVisualizerProps {
   analyser: AnalyserNode;
   isPlaying: boolean;
   params: VisualizerParams;
-  mousePos: { x: number; y: number; };
   onSphereClick: () => void;
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, params, mousePos, onSphereClick }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, params, onSphereClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const visualizerRef = useRef<Visualizer | null>(null);
 
@@ -31,10 +30,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isPlaying, 
   useEffect(() => {
     visualizerRef.current?.updateParams(params);
   }, [params]);
-
-  useEffect(() => {
-    visualizerRef.current?.updateMousePosition(mousePos);
-  }, [mousePos]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 };
