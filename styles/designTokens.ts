@@ -25,13 +25,14 @@ export const colors = {
   gray300: '#DEE2E6',
   gray400: '#CED4DA',
   gray500: '#ADB5BD',
-  gray600: '#6C757D',
+  // Darkened gray600 from #6C757D to #5E666E to ensure WCAG AA (4.5:1) compliance on white
+  gray600: '#5E666E', 
   gray700: '#495057',
   gray800: '#343A40',
   gray900: '#212529',
   gray950: '#121212',
   // Feedback
-  blue: '#007BFF',
+  blue: '#007BFF', // Kept for functional focus if needed, but UI will use achromatic primary
   green: '#28A745',
   orange: '#FD7E14',
   red: '#DC3545',
@@ -63,7 +64,6 @@ export const typography = {
 
   headlineL: createTypeScale(32, 40, 700, 0, 'h2'),
   headlineM: createTypeScale(28, 36, 700, 0, 'h3'),
-  // FIX: Added missing letterSpacing argument (0) to match other headlines.
   headlineS: createTypeScale(24, 32, 700, 0, 'h4'),
 
   titleL: createTypeScale(22, 28, 500, 0.01, 'h5'),
@@ -103,8 +103,9 @@ export const shadows = {
   shadow1: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
   shadow2: '0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23)',
   shadow3: '0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23)',
-  shadowBlueGlow1: `0 0 12px ${colors.blue}33`,
-  shadowBlueGlow2: `0 0 24px ${colors.blue}4D, 0 0 48px ${colors.blue}33`,
+  // Neutral Glows (Achromatic)
+  shadowGlow1: `0 0 12px rgba(255, 255, 255, 0.2)`,
+  shadowGlow2: `0 0 24px rgba(255, 255, 255, 0.15), 0 0 48px rgba(255, 255, 255, 0.1)`,
 };
 
 export const zIndex = {

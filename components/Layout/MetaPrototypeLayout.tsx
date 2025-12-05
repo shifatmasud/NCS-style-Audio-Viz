@@ -1,90 +1,9 @@
-import React, { useState, CSSProperties } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useTheme, Theme } from '../../styles/theme';
-import { Code, SlidersHorizontal, TerminalWindow, X } from '../Core/Icon/PhosphorIcons';
+import { Code, SlidersHorizontal, TerminalWindow } from '../Core/Icon/PhosphorIcons';
 
-const getStyles = (theme: Theme): { [key: string]: CSSProperties } => ({
-  layoutContainer: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: theme.Color.Base.Surface[1],
-  },
-  mainContent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: theme.ZIndex.base,
-  },
-  panel: {
-    position: 'absolute',
-    width: 340,
-    maxHeight: `calc(100% - ${theme.Spacing.s8})`,
-    backgroundColor: `${theme.Color.Base.Surface[2]}cc`,
-    backdropFilter: 'blur(10px)',
-    border: `1px solid ${theme.Color.Border[1]}`,
-    borderRadius: theme.Radii.r4,
-    boxShadow: theme.Shadows.shadow3,
-    display: 'flex',
-    flexDirection: 'column',
-    zIndex: theme.ZIndex.panel,
-  },
-  panelHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: `${theme.Spacing.s2} ${theme.Spacing.s4}`,
-    borderBottom: `1px solid ${theme.Color.Border[1]}`,
-    cursor: 'grab',
-    flexShrink: 0,
-  },
-  panelTitle: {
-    ...theme.Typography.labelL,
-    color: theme.Color.Base.Content[1],
-  },
-  closeButton: {
-    border: 'none',
-    background: 'transparent',
-    color: theme.Color.Base.Content[2],
-    cursor: 'pointer',
-    padding: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '24px',
-    height: '24px',
-    borderRadius: '50%',
-  },
-  panelContent: {
-    padding: theme.Spacing.s4,
-    overflowY: 'auto',
-    flex: 1,
-  },
-  toggleButton: {
-    position: 'absolute',
-    backgroundColor: theme.Color.Base.Surface[3],
-    border: 'none',
-    color: theme.Color.Base.Content[2],
-    width: '32px',
-    height: '32px',
-    borderRadius: theme.Radii.r2,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    zIndex: theme.ZIndex.panel - 1,
-    boxShadow: theme.Shadows.shadow2,
-  },
-});
-
-const panelMotionProps = {
-    transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
-    dragTransition: { bounceStiffness: 600, bounceDamping: 20 },
-    dragMomentum: false,
-};
+// --- Types ---
 
 interface MetaPrototypeLayoutProps {
   children: React.ReactNode;
@@ -93,120 +12,394 @@ interface MetaPrototypeLayoutProps {
   consolePanel: React.ReactNode;
 }
 
-const MetaPrototypeLayout: React.FC<MetaPrototypeLayoutProps> = ({ children, codePanel, controlPanel, consolePanel }) => {
+type WindowId = 'code' | 'control' | 'console';
+
+interface WindowState {
+  id: WindowId;
+  title: string;
+  isOpen: boolean;
+  zIndex: number;
+}
+
+// --- Styles ---
+
+const getStyles = (theme: Theme) => ({
+  container: {
+    width: '100vw',
+    height: '100vh',
+    position: 'relative' as const,
+    overflow: 'hidden',
+    backgroundColor: theme.Color.Base.Surface[1],
+  },
+  contentLayer: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: theme.ZIndex.base,
+  },
+  // Dock Styles
+  dockContainer: {
+    position: 'absolute' as const,
+    bottom: theme.Spacing.s8,
+    left: '50%',
+    zIndex: theme.ZIndex.dock,
+    display: 'flex',
+    gap: theme.Spacing.s4,
+    padding: `${theme.Spacing.s3} ${theme.Spacing.s4}`,
+    backgroundColor: 'rgba(20, 20, 20, 0.4)', // Glassmorphic base
+    backdropFilter: 'blur(20px)',
+    borderRadius: theme.Radii.r5, // Peel shape
+    border: `1px solid rgba(255, 255, 255, 0.1)`,
+    boxShadow: theme.Shadows.shadow3,
+    cursor: 'grab',
+    // Removed transform: 'translateX(-50%)' to allow Framer Motion to handle x position via drag
+  },
+  dockIcon: {
+    width: '48px',
+    height: '48px',
+    borderRadius: theme.Radii.r3,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    color: theme.Color.Base.Content[1],
+    border: '1px solid rgba(255, 255, 255, 0.05)',
+    cursor: 'pointer',
+    position: 'relative' as const,
+  },
+  activeDot: {
+    position: 'absolute' as const,
+    bottom: '-6px',
+    width: '4px',
+    height: '4px',
+    borderRadius: '50%',
+    backgroundColor: theme.Color.Base.Content[1],
+  },
+  // Window Styles
+  windowFrame: {
+    position: 'absolute' as const,
+    backgroundColor: 'rgba(20, 20, 20, 0.65)', // Dark glass
+    backdropFilter: 'blur(25px)',
+    borderRadius: theme.Radii.r4,
+    border: `1px solid rgba(255, 255, 255, 0.08)`,
+    boxShadow: theme.Shadows.shadow3,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflow: 'hidden',
+    minWidth: '320px',
+    maxWidth: '90vw',
+    maxHeight: '80vh',
+  },
+  windowHeader: {
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between', // Title left, close right
+    padding: `0 ${theme.Spacing.s4}`,
+    borderBottom: `1px solid rgba(255, 255, 255, 0.05)`,
+    cursor: 'grab',
+    userSelect: 'none' as const,
+    touchAction: 'none' as const, // Important for drag on touch devices
+  },
+  windowTitle: {
+    ...theme.Typography.labelM,
+    color: theme.Color.Base.Content[2],
+    letterSpacing: '0.05em',
+  },
+  closeButton: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: theme.Color.Error.Surface[1], 
+    boxShadow: `0 0 8px ${theme.Color.Error.Surface[1]}80`,
+    border: 'none',
+    cursor: 'pointer',
+  },
+  windowContent: {
+    flex: 1,
+    overflowY: 'auto' as const,
+    padding: theme.Spacing.s4,
+    color: theme.Color.Base.Content[1],
+    // Custom scrollbar
+    scrollbarWidth: 'thin' as const,
+    scrollbarColor: `${theme.Color.Base.Content[3]} transparent`,
+  },
+});
+
+// --- Components ---
+
+const DockIcon = ({ 
+  icon: Icon, 
+  label, 
+  isActive, 
+  onClick 
+}: { 
+  icon: React.ElementType, 
+  label: string, 
+  isActive: boolean, 
+  onClick: () => void 
+}) => {
   const { theme } = useTheme();
   const styles = getStyles(theme);
-  const [isCodeOpen, setIsCodeOpen] = useState(false);
-  const [isControlOpen, setIsControlOpen] = useState(true);
-  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
-  
+
   return (
-    <div style={styles.layoutContainer}>
-        <main style={styles.mainContent}>
-          {children}
-        </main>
+    <motion.div
+      style={styles.dockIcon}
+      whileHover={{ scale: 1.15, y: -5, backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
+      whileTap={{ scale: 0.95 }}
+      onClick={onClick}
+      title={label}
+    >
+      <Icon size={24} weight={isActive ? "fill" : "regular"} />
+      {isActive && <div style={styles.activeDot} />}
+    </motion.div>
+  );
+};
 
-        {/* Panel Toggles */}
-        <AnimatePresence>
-            {!isCodeOpen && (
-                <motion.button 
-                  style={{...styles.toggleButton, top: theme.Spacing.s4, left: theme.Spacing.s4}} 
-                  onClick={() => setIsCodeOpen(true)} 
-                  aria-label="Open Code Panel"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                >
-                   <Code />
-                </motion.button>
-            )}
-        </AnimatePresence>
-        <AnimatePresence>
-            {!isControlOpen && (
-                <motion.button 
-                  style={{...styles.toggleButton, top: theme.Spacing.s4, right: theme.Spacing.s4}} 
-                  onClick={() => setIsControlOpen(true)} 
-                  aria-label="Open Control Panel"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                >
-                   <SlidersHorizontal />
-                </motion.button>
-            )}
-        </AnimatePresence>
-        <AnimatePresence>
-            {!isConsoleOpen && (
-                 <motion.button 
-                   style={{...styles.toggleButton, bottom: theme.Spacing.s8, left: '50%', transform: 'translateX(-50%)'}} 
-                   onClick={() => setIsConsoleOpen(true)} 
-                   aria-label="Open Console Panel"
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   exit={{ opacity: 0, y: 20 }}
-                 >
-                   <TerminalWindow />
-                </motion.button>
-            )}
-        </AnimatePresence>
-        
-        {/* Panels */}
-        <AnimatePresence>
-            {isCodeOpen && (
-                <motion.div
-                    style={{...styles.panel, top: theme.Spacing.s4, left: theme.Spacing.s4}}
-                    drag dragHandle=".drag-handle"
-                    initial={{ opacity: 0, x: -50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
-                    {...panelMotionProps}
-                >
-                    <div style={styles.panelHeader} className="drag-handle">
-                        <span style={styles.panelTitle}>Code I/O</span>
-                        <button style={styles.closeButton} onClick={() => setIsCodeOpen(false)} aria-label="Close Code Panel"><X /></button>
-                    </div>
-                    <div style={styles.panelContent}>{codePanel}</div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+interface WindowFrameProps {
+  id: string;
+  title: string;
+  children: React.ReactNode;
+  isOpen: boolean;
+  onClose: () => void;
+  zIndex: number;
+  onFocus: () => void;
+  initialPosition: { x: number; y: number };
+}
 
-        <AnimatePresence>
-            {isControlOpen && (
-                <motion.div
-                    style={{...styles.panel, top: theme.Spacing.s4, right: theme.Spacing.s4}}
-                    drag dragHandle=".drag-handle"
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 50 }}
-                    {...panelMotionProps}
-                >
-                     <div style={styles.panelHeader} className="drag-handle">
-                        <span style={styles.panelTitle}>Controls</span>
-                        <button style={styles.closeButton} onClick={() => setIsControlOpen(false)} aria-label="Close Control Panel"><X /></button>
-                    </div>
-                    <div style={styles.panelContent}>{controlPanel}</div>
-                </motion.div>
-            )}
-        </AnimatePresence>
-        
-        <AnimatePresence>
-            {isConsoleOpen && (
-                 <motion.div
-                    style={{...styles.panel, height: 250, width: `calc(100% - ${theme.Spacing.s8})`, bottom: theme.Spacing.s4, left: theme.Spacing.s4 }}
-                    drag dragHandle=".drag-handle"
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 50 }}
-                    {...panelMotionProps}
-                 >
-                    <div style={styles.panelHeader} className="drag-handle">
-                        <span style={styles.panelTitle}>Console</span>
-                        <button style={styles.closeButton} onClick={() => setIsConsoleOpen(false)} aria-label="Close Console Panel"><X /></button>
-                    </div>
-                    <div style={styles.panelContent}>{consolePanel}</div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+const WindowFrame: React.FC<WindowFrameProps> = ({ 
+  id,
+  title, 
+  children, 
+  isOpen, 
+  onClose, 
+  zIndex, 
+  onFocus,
+  initialPosition
+}) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
+  const dragControls = useDragControls();
+
+  // Determine window size based on type for better UX
+  const getSize = () => {
+    switch(id) {
+        case 'console': return { width: 500, height: 300 };
+        case 'code': return { width: 400, height: 500 };
+        default: return { width: 360, height: 550 };
+    }
+  };
+
+  const size = getSize();
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key={id}
+          drag
+          dragListener={false} // Only drag from header via controls
+          dragControls={dragControls}
+          dragMomentum={false}
+          onPointerDown={onFocus}
+          // Set X and Y in initial, remove from animate to prevent snapping back
+          initial={{ 
+            opacity: 0, 
+            scale: 0.95, 
+            x: initialPosition.x - (size.width / 2), 
+            y: initialPosition.y - (size.height / 2),
+            filter: 'blur(10px)'
+          }}
+          animate={{ 
+            opacity: 1, 
+            scale: 1, 
+            filter: 'blur(0px)',
+            // zIndex removed from animate so it doesn't trigger a transform re-calc that resets drag
+          }}
+          exit={{ 
+            opacity: 0, 
+            scale: 0.95, 
+            filter: 'blur(10px)',
+            transition: { duration: 0.2 } 
+          }}
+          style={{
+            ...styles.windowFrame,
+            width: size.width,
+            height: size.height,
+            zIndex: zIndex // zIndex applied here
+          }}
+          transition={{
+            type: "spring",
+            damping: 25,
+            stiffness: 300,
+            mass: 0.8
+          }}
+        >
+          {/* Header */}
+          <div 
+            style={styles.windowHeader} 
+            onPointerDown={(e) => {
+              dragControls.start(e); // Start drag first
+              onFocus(); // Then focus
+            }}
+          >
+            <span style={styles.windowTitle}>{title}</span>
+            <motion.button 
+              style={styles.closeButton} 
+              onPointerDown={(e) => e.stopPropagation()} // Prevent dragging when clicking close
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
+              aria-label="Close"
+            />
+          </div>
+
+          {/* Content */}
+          <div 
+            style={styles.windowContent}
+            // Removed e.stopPropagation() so clicking content triggers onPointerDown={onFocus} on parent
+          >
+            {children}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+// --- Main Layout ---
+
+const MetaPrototypeLayout: React.FC<MetaPrototypeLayoutProps> = ({ 
+  children, 
+  codePanel, 
+  controlPanel, 
+  consolePanel 
+}) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
+  
+  // State
+  const [windows, setWindows] = useState<Record<WindowId, WindowState>>({
+    code: { id: 'code', title: 'CODE I/O', isOpen: false, zIndex: 100 },
+    control: { id: 'control', title: 'CONTROLS', isOpen: true, zIndex: 101 },
+    console: { id: 'console', title: 'CONSOLE', isOpen: false, zIndex: 100 },
+  });
+
+  const [topZ, setTopZ] = useState(102);
+
+  const focusWindow = (id: WindowId) => {
+    setWindows(prev => {
+        if (prev[id].zIndex === topZ - 1) return prev; // Already on top
+        return {
+            ...prev,
+            [id]: { ...prev[id], zIndex: topZ }
+        };
+    });
+    setTopZ(prev => prev + 1);
+  };
+
+  const toggleWindow = (id: WindowId) => {
+    setWindows(prev => {
+      const isOpen = !prev[id].isOpen;
+      let newZ = prev[id].zIndex;
+      
+      if (isOpen) {
+        newZ = topZ;
+        setTopZ(z => z + 1);
+      }
+
+      return {
+        ...prev,
+        [id]: { ...prev[id], isOpen, zIndex: newZ }
+      };
+    });
+  };
+
+  const closeWindow = (id: WindowId) => {
+    setWindows(prev => ({
+      ...prev,
+      [id]: { ...prev[id], isOpen: false }
+    }));
+  };
+
+  // Center position for windows (approximation of 50vw, 50vh)
+  const centerPos = { x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 };
+
+  return (
+    <div style={styles.container}>
+      {/* 3D Content Layer */}
+      <div style={styles.contentLayer}>
+        {children}
+      </div>
+
+      {/* Floating Windows */}
+      <WindowFrame 
+        id="code"
+        title={windows.code.title}
+        isOpen={windows.code.isOpen}
+        onClose={() => closeWindow('code')}
+        zIndex={windows.code.zIndex}
+        onFocus={() => focusWindow('code')}
+        initialPosition={centerPos}
+      >
+        {codePanel}
+      </WindowFrame>
+
+      <WindowFrame 
+        id="control"
+        title={windows.control.title}
+        isOpen={windows.control.isOpen}
+        onClose={() => closeWindow('control')}
+        zIndex={windows.control.zIndex}
+        onFocus={() => focusWindow('control')}
+        initialPosition={centerPos}
+      >
+        {controlPanel}
+      </WindowFrame>
+
+      <WindowFrame 
+        id="console"
+        title={windows.console.title}
+        isOpen={windows.console.isOpen}
+        onClose={() => closeWindow('console')}
+        zIndex={windows.console.zIndex}
+        onFocus={() => focusWindow('console')}
+        initialPosition={{ x: centerPos.x, y: centerPos.y + 150 }} // Offset console slightly
+      >
+        {consolePanel}
+      </WindowFrame>
+
+      {/* Dock */}
+      <motion.div 
+        style={styles.dockContainer}
+        drag
+        dragMomentum={false}
+        dragConstraints={{ left: -centerPos.x + 100, right: centerPos.x - 100, top: -centerPos.y * 2 + 100, bottom: 0 }}
+        initial={{ y: 100, opacity: 0, x: '-50%' }}
+        animate={{ y: 0, opacity: 1 }} // x removed from animate to rely on drag transform
+        transition={{ delay: 0.5, type: 'spring', stiffness: 200, damping: 20 }}
+      >
+        <DockIcon 
+          icon={Code} 
+          label="Code I/O" 
+          isActive={windows.code.isOpen} 
+          onClick={() => toggleWindow('code')} 
+        />
+        <DockIcon 
+          icon={SlidersHorizontal} 
+          label="Controls" 
+          isActive={windows.control.isOpen} 
+          onClick={() => toggleWindow('control')} 
+        />
+        <DockIcon 
+          icon={TerminalWindow} 
+          label="Console" 
+          isActive={windows.console.isOpen} 
+          onClick={() => toggleWindow('console')} 
+        />
+      </motion.div>
     </div>
   );
 };

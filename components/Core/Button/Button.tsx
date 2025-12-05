@@ -13,11 +13,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
 }
 
-const Button: React.FC<ButtonProps> = ({ children, style, ...props }) => {
+const Button: React.FC<ButtonProps> = ({ children, style, onFocus, onBlur, ...props }) => {
   const { theme } = useTheme();
   const [ripples, setRipples] = useState<StateLayer[]>([]);
   const ref = useRef<HTMLButtonElement>(null);
-  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const buttonStyle: React.CSSProperties = {
     position: 'relative',
@@ -33,8 +33,10 @@ const Button: React.FC<ButtonProps> = ({ children, style, ...props }) => {
     backgroundColor: theme.Color.Primary.Surface[1],
     color: theme.Color.Primary.Content[1],
     borderRadius: theme.Radii.r3,
-    transition: `background-color ${theme.Motion.durationM}`,
+    transition: `background-color ${theme.Motion.durationM}, box-shadow ${theme.Motion.durationM}`,
     outline: 'none',
+    // Apply focus ring style if focused via keyboard
+    boxShadow: isFocused ? theme.Shadows.shadowFocus : undefined,
     WebkitTapHighlightColor: 'transparent',
     ...style,
   };
@@ -48,12 +50,10 @@ const Button: React.FC<ButtonProps> = ({ children, style, ...props }) => {
   };
 
   const handlePointerEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
-    setIsHovered(true);
     addRipple(e, 'hover');
   }
 
   const handlePointerLeave = () => {
-    setIsHovered(false);
     setRipples(current => current.filter(r => r.type !== 'hover'));
   }
   
@@ -65,6 +65,16 @@ const Button: React.FC<ButtonProps> = ({ children, style, ...props }) => {
     setRipples(current => current.filter(r => r.type !== 'press'));
   }
 
+  const handleFocus = (e: React.FocusEvent<HTMLButtonElement>) => {
+    setIsFocused(true);
+    if (onFocus) onFocus(e);
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLButtonElement>) => {
+    setIsFocused(false);
+    if (onBlur) onBlur(e);
+  };
+
   return (
     <button
       ref={ref}
@@ -73,6 +83,8 @@ const Button: React.FC<ButtonProps> = ({ children, style, ...props }) => {
       onPointerLeave={handlePointerLeave}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       {...props}
     >
       <AnimatePresence>

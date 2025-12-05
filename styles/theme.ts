@@ -3,14 +3,20 @@ import { colors, typography, spacing, radii, motion, shadows, zIndex } from './d
 
 // Tier 2 - Design System: Semantic Tokens
 const darkTheme = {
+  colors, // Expose raw colors for legacy/direct usage
   // Category/Purpose/Context/Variant
   Color: {
     Base: {
       Surface: { 1: colors.black, 2: colors.gray950, 3: colors.gray900 },
-      Content: { 1: colors.gray100, 2: colors.gray400, 3: colors.gray600 },
+      Content: { 1: colors.gray100, 2: colors.gray400, 3: colors.gray500 },
     },
     Primary: {
-      Surface: { 1: colors.blue },
+      // Achromatic Primary: White surface on dark mode
+      Surface: { 1: colors.white },
+      Content: { 1: colors.black },
+    },
+    Error: {
+      Surface: { 1: colors.red },
       Content: { 1: colors.white },
     },
     Border: {
@@ -22,8 +28,20 @@ const darkTheme = {
   Spacing: spacing,
   Radii: radii,
   Motion: motion,
-  Shadows: shadows,
-  ZIndex: zIndex,
+  Shadows: {
+    ...shadows,
+    // Map semantic shadows to the new neutral tokens
+    shadowFocus: `0 0 0 3px ${colors.black}, 0 0 0 5px ${colors.white}`,
+  },
+  ZIndex: {
+    ...zIndex,
+    base: 1,
+    canvas: 10,
+    content: 20,
+    window: 100, // Window start index
+    dock: 1000,
+    tooltip: 1100,
+  },
 };
 
 const lightTheme = {
@@ -31,10 +49,15 @@ const lightTheme = {
   Color: {
     Base: {
       Surface: { 1: colors.white, 2: colors.gray100, 3: colors.gray200 },
-      Content: { 1: colors.gray900, 2: colors.gray700, 3: colors.gray500 },
+      Content: { 1: colors.gray900, 2: colors.gray700, 3: colors.gray600 },
     },
     Primary: {
-      Surface: { 1: colors.blue },
+      // Achromatic Primary: Black surface on light mode
+      Surface: { 1: colors.black },
+      Content: { 1: colors.white },
+    },
+    Error: {
+      Surface: { 1: colors.red },
       Content: { 1: colors.white },
     },
     Border: {
@@ -42,6 +65,10 @@ const lightTheme = {
       2: colors.gray400
     },
   },
+  Shadows: {
+      ...shadows,
+      shadowFocus: `0 0 0 3px ${colors.white}, 0 0 0 5px ${colors.black}`,
+  }
 };
 
 export type Theme = typeof darkTheme;
@@ -63,8 +90,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const theme = useMemo(() => (themeMode === 'dark' ? darkTheme : lightTheme), [themeMode]);
 
-  // FIX: Replaced JSX with React.createElement to avoid parsing issues in a .ts file.
-  // JSX syntax is not supported in files with a .ts extension; it requires a .tsx extension.
   return React.createElement(
     ThemeContext.Provider,
     { value: { theme, themeMode, toggleTheme } },

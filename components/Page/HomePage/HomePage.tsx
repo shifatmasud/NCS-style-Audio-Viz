@@ -18,7 +18,8 @@ const HomePage: React.FC = () => {
     bloom: 0.35,
     pointSize: 3.8,
     particleDensity: 31,
-    baseColor: "#5d47ff",
+    // Achromatic / Silver default
+    baseColor: "#E0E0E0", 
     hotColor: "#ffffff",
     waveFrequency: 6,
     waveSpeed: 2.4,
@@ -217,7 +218,7 @@ const InitialState: React.FC<{onFileChange: (e: React.ChangeEvent<HTMLInputEleme
         borderRadius: theme.Radii.r5,
         backgroundColor: `${theme.Color.Base.Surface[1]}80`, // with transparency
         backdropFilter: 'blur(10px)',
-        boxShadow: theme.Shadows.shadowBlueGlow2,
+        boxShadow: theme.Shadows.shadowGlow2, // Updated to neutral glow
         maxWidth: '500px',
       },
       title: {
